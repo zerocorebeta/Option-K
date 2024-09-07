@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.example.optionk</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>#{opt_libexec}/bin/python</string>
+    <string>#{opt_libexec}/option-k-server.py</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PYTHONPATH</key>
+    <string>#{opt_libexec}/lib/python3.*/site-packages</string>
+    <key>PATH</key>
+    <string>#{opt_libexec}/bin:$PATH</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+</dict>
+</plist>

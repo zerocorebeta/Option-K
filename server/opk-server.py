@@ -16,6 +16,7 @@ from google.generativeai.types import HarmBlockThreshold as GoogleHarmBlockThres
 import argparse
 import vertexai
 import logging
+import re
 
 def create_default_config(config_path):
     config = configparser.ConfigParser()
@@ -114,10 +115,10 @@ def get_system_info():
     return f"{os_name} {version} ({machine})"
 
 async def generate_response_stream(query, command_type, system_info):
-    is_git_query = "git" in query.lower()
+    is_git_query = is_git_related_query(query)
     
     if is_git_query:
-        system_query = f"""Machine-readable output.You are a Git expert providing git commands that match the query.
+        system_query = f"""Machine-readable output. You are a Git expert providing git commands that match the query.
         Provide git commands specific to this system.
         Rank suggestions by relevance.
         Explain what each git command does and how it works.
@@ -169,18 +170,48 @@ async def generate_response_stream(query, command_type, system_info):
     
     return full_response
 
-async def get_single_best_result(query, command_type, system_info):
+def is_git_related_query(query):
     query = query.lower()
-    terms = ["commit", "commits"]
-    is_git_query = any(fuzz.partial_ratio(term, query) > 80 for term in terms) and "git" not in query.split("/")
+    git_terms = ["git", "commit", "branch", "merge", "pull", "push", "rebase", "stash", "checkout", "clone"]
+    url_pattern = re.compile(r'https?://\S+|www\.\S+')
+
+    # Check if any git term is mentioned (allowing for misspellings)
+    contains_git_term = any(fuzz.partial_ratio(term, query) > 85 for term in git_terms)
+
+    # Check if 'git' is part of a URL
+    urls = url_pattern.findall(query)
+    git_in_url = any('git' in url.lower() for url in urls)
+
+    # Check for common download commands
+    download_commands = ["curl", "wget"]
+    looks_like_download = any(command in query for command in download_commands)
+
+    # Check for context (e.g., "How to use git")
+    git_context = re.search(r'\b(use|using|with|in)\s+git\b', query) is not None
+
+    return (contains_git_term or git_context) and not (git_in_url or looks_like_download)
+
+async def get_single_best_result(query, command_type, system_info):
+    is_git_query = is_git_related_query(query)
+    is_commit_message = "commit" in query and "message" in query
     
     if is_git_query:
         system_query = f"""Machine-readable output. 
         Output with JUST the command to run directly in the command line.
         You are a Git expert providing the single best git command that matches the query.
         """
-        if "message" in query:
-            system_query += f"\nRewrite the commit message to meet Conventional Commits Specification."
+        if is_commit_message:
+            system_query += """
+            For commit messages:
+            1. Rewrite the commit message to meet Conventional Commits Specification.
+            2. Use the block-style commit message format with a single pair of quotes.
+            3. Separate the title from the body with a blank line.
+            4. Wrap the body text at approximately 72 characters.
+            5. Output just the git commit command.
+            """
+        else:
+            system_query += "Output JUST the command to run directly in the command line."
+
     else:
         system_query = f"""Machine-readable output.
         Output with JUST the command to run directly in the command line.
@@ -195,7 +226,7 @@ async def get_single_best_result(query, command_type, system_info):
         response = model.generate_content(
             [full_query],
             generation_config=GenerationConfig(
-                max_output_tokens=100,
+                max_output_tokens=500,
                 temperature=0,
                 top_p=1,
                 top_k=1
@@ -247,40 +278,6 @@ def parse_arguments():
     parser.add_argument('--config', help='Path to custom config file')
     return parser.parse_args()
 
-def validate_config(config):
-    errors = []
-
-    # Validate optionk section
-    if not config.has_section('optionk'):
-        errors.append("Missing 'optionk' section in config")
-    else:
-        if not config.has_option('optionk', 'port'):
-            errors.append("Missing 'port' in 'optionk' section")
-        else:
-            try:
-                int(config.get('optionk', 'port'))
-            except ValueError:
-                errors.append("Invalid 'port' value in 'optionk' section")
-
-    # Validate AI service sections
-    vertexai_enabled = config.getboolean('vertexai', 'enabled', fallback=False)
-    googleai_enabled = config.getboolean('google_ai_studio', 'enabled', fallback=False)
-
-    if not vertexai_enabled and not googleai_enabled:
-        errors.append("No AI service is enabled in the configuration")
-
-    if vertexai_enabled:
-        for option in ['project', 'location', 'model']:
-            if not config.has_option('vertexai', option):
-                errors.append(f"Missing '{option}' in 'vertexai' section")
-
-    if googleai_enabled:
-        for option in ['api_key', 'model']:
-            if not config.has_option('google_ai_studio', option):
-                errors.append(f"Missing '{option}' in 'google_ai_studio' section")
-
-    return errors
-
 def run_server():
     args = parse_arguments()
     
@@ -296,14 +293,6 @@ def run_server():
 
     # Set up logging
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
-    # Validate configuration
-    config_errors = validate_config(config)
-    if config_errors:
-        for error in config_errors:
-            logging.error(f"Configuration error: {error}")
-        logging.error("Please fix the configuration errors and restart the server.")
-        return
 
     # Check configuration and initialize AI model
     try:

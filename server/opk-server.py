@@ -15,10 +15,58 @@ from google.generativeai.types import HarmCategory as GoogleHarmCategory
 from google.generativeai.types import HarmBlockThreshold as GoogleHarmBlockThreshold
 import argparse
 import vertexai
+import logging
+
+def create_default_config(config_path):
+    config = configparser.ConfigParser()
+    config['optionk'] = {
+        'port': '8089'
+    }
+    config['vertexai'] = {
+        'enabled': 'false',
+        'project': 'my-project',
+        'location': 'asia-south1',
+        'model': 'gemini-1.5-flash-001'
+    }
+    config['google_ai_studio'] = {
+        'enabled': 'true',
+        'api_key': 'YOUR_API_KEY_HERE',
+        'model': 'gemini-1.5-flash'
+    }
+    
+    os.makedirs(os.path.dirname(config_path), exist_ok=True)
+    with open(config_path, 'w') as configfile:
+        config.write(configfile)
+    
+    # Add helpful comments to the config file
+    with open(config_path, 'r+') as f:
+        content = f.read()
+        f.seek(0, 0)
+        f.write("# Option-K Configuration File\n\n")
+        f.write("# [optionk]\n# port: The port number for the Option-K server\n\n")
+        f.write("# [vertexai]\n# enabled: Set to true to use Vertex AI\n# project: Your Google Cloud project ID\n# location: The location of your Vertex AI resources\n# model: The Vertex AI model to use\n\n")
+        f.write("# [google_ai_studio]\n# enabled: Set to true to use Google AI Studio\n# api_key: Your Google AI Studio API key\n# model: The Google AI Studio model to use\n\n")
+        f.write(content)
+
+def get_config_path(custom_path=None):
+    if custom_path:
+        return custom_path
+    
+    if platform.system() == "Windows":
+        config_path = os.path.join(os.environ.get('APPDATA'), 'optionk', 'config.ini')
+    else:
+        config_path = os.path.expanduser('~/.config/optionk/config.ini')
+    
+    # Check for the old config location
+    old_config_path = os.path.expanduser('~/.optionk/config.ini')
+    if os.path.exists(old_config_path) and not os.path.exists(config_path):
+        return old_config_path
+    
+    return config_path
 
 # Load configuration
 config = configparser.ConfigParser()
-config.read(os.path.expanduser('~/.optionk/config.ini'))
+config.read(get_config_path())
 
 # Initialize AI model based on configuration
 if config.getboolean('vertexai', 'enabled', fallback=False):
@@ -196,11 +244,88 @@ def signal_handler(signame):
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Option-K Server")
+    parser.add_argument('--config', help='Path to custom config file')
     return parser.parse_args()
+
+def validate_config(config):
+    errors = []
+
+    # Validate optionk section
+    if not config.has_section('optionk'):
+        errors.append("Missing 'optionk' section in config")
+    else:
+        if not config.has_option('optionk', 'port'):
+            errors.append("Missing 'port' in 'optionk' section")
+        else:
+            try:
+                int(config.get('optionk', 'port'))
+            except ValueError:
+                errors.append("Invalid 'port' value in 'optionk' section")
+
+    # Validate AI service sections
+    vertexai_enabled = config.getboolean('vertexai', 'enabled', fallback=False)
+    googleai_enabled = config.getboolean('google_ai_studio', 'enabled', fallback=False)
+
+    if not vertexai_enabled and not googleai_enabled:
+        errors.append("No AI service is enabled in the configuration")
+
+    if vertexai_enabled:
+        for option in ['project', 'location', 'model']:
+            if not config.has_option('vertexai', option):
+                errors.append(f"Missing '{option}' in 'vertexai' section")
+
+    if googleai_enabled:
+        for option in ['api_key', 'model']:
+            if not config.has_option('google_ai_studio', option):
+                errors.append(f"Missing '{option}' in 'google_ai_studio' section")
+
+    return errors
 
 def run_server():
     args = parse_arguments()
     
+    config_path = get_config_path(args.config)
+    if not os.path.exists(config_path):
+        create_default_config(config_path)
+        print(f"Created default configuration file at: {config_path}")
+    else:
+        print(f"Using configuration file: {config_path}")
+    
+    config = configparser.ConfigParser()
+    config.read(config_path)
+
+    # Set up logging
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+    # Validate configuration
+    config_errors = validate_config(config)
+    if config_errors:
+        for error in config_errors:
+            logging.error(f"Configuration error: {error}")
+        logging.error("Please fix the configuration errors and restart the server.")
+        return
+
+    # Check configuration and initialize AI model
+    try:
+        if config.getboolean('vertexai', 'enabled', fallback=False):
+            vertexai.init(project=config.get('vertexai', 'project'), location=config.get('vertexai', 'location'))
+            model = GenerativeModel(config.get('vertexai', 'model'))
+            logging.info("Initialized Vertex AI model")
+        elif config.getboolean('google_ai_studio', 'enabled', fallback=False):
+            genai.configure(api_key=config.get('google_ai_studio', 'api_key'))
+            model = genai.GenerativeModel(config.get('google_ai_studio', 'model'))
+            logging.info("Initialized Google AI Studio model")
+        else:
+            raise ValueError("No AI service is enabled in the configuration")
+        
+        # Test API
+        test_query = "Hello, world!"
+        test_result = asyncio.run(get_single_best_result(test_query, "CLI", get_system_info()))
+        logging.info(f"API test successful. Response: {test_result}")
+    except Exception as e:
+        logging.error(f"Error initializing AI model: {str(e)}")
+        return
+
     app = web.Application()
     app.router.add_post('/generate', handle_generate)
     app.router.add_post('/quick_suggest', handle_quick_suggest)
@@ -218,15 +343,21 @@ def run_server():
         )
 
     port = int(config.get('optionk', 'port'))
+    host = 'localhost'
+    
     if platform.system() == "Darwin":
         # macOS specific configuration
-        web.run_app(app, port=port, host='localhost')
+        logging.info(f"Starting server on http://{host}:{port}")
+        web.run_app(app, port=port, host=host)
     elif platform.system() == "Linux":
         # Linux (systemd) specific configuration
-        web.run_app(app, port=port, host='localhost', path='/run/zerocoretwo/server.sock')
+        socket_path = '/run/zerocoretwo/server.sock'
+        logging.info(f"Starting server on Unix socket: {socket_path}")
+        web.run_app(app, port=port, host=host, path=socket_path)
     else:
         # Default configuration
-        web.run_app(app, port=port, host='localhost')
+        logging.info(f"Starting server on http://{host}:{port}")
+        web.run_app(app, port=port, host=host)
 
 if __name__ == '__main__':
     run_server()

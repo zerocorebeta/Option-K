@@ -47,7 +47,7 @@ After installation follow the instructions on the screen to complete setup.
 
 1. Request a free Google AI Studio API key [here](https://ai.google.dev/gemini-api/docs/getting-started)
 
-2. Edit the `~/.optionk/config.ini` file to configure the AI backend:
+2. Edit the `~/.config/optionk/config.ini` file to configure the AI backend:
 
 ```ini
 [optionk]
@@ -65,12 +65,51 @@ api_key = YOUR_API_KEY_HERE
 model = gemini-1.5-flash
 ```
 
+Note `enabled` should be set to `true` for one of the AI backends.
+
+Request a free Google AI Studio API key https://ai.google.dev/gemini-api/docs/getting-started
+
+For vertex, auth is handled by gcloud cli:
+https://cloud.google.com/vertex-ai/generative-ai/docs/start/quickstarts/quickstart-multimodal#set-up-your-environment
+
 Note on Region Support:
 - Vertex AI: Supports custom regions, allowing you to specify a location of your choice.
-- Google AI Studio: Only supports the `us-central1` region. This cannot be changed.
+- Google AI Studio: Only supports the `us-central1` regi on. This cannot be changed.
 
 When configuring your `config.ini`, keep in mind this difference in regional flexibility between the two services.
 
+After editing the config file, restart the server  `brew services restart optionk`
+
+Check logs here: `/usr/local/var/log/opk-server.log`
+
+Test by running `opk "show current time"`
+
+If you want one line quick suggestion: `opk "show current time" --quick` 
+
+Now, all that is left is to map a hotkey combo to this `opk --quick command.`
+
+Edit ~/.zshrc or ~/.bashrc and add this line:
+
+```zsh
+
+optionk() {
+    local query="$BUFFER"
+    local result=$(opk query --quick "$query")
+    BUFFER="$result"
+    zle end-of-line
+}
+zle -N optionk
+bindkey '˚' optionk 
+```
+
+In this we are binding `option+k` to our custom function `optionk` which will generate the command based on the text we type in terminal.
+
+You can edit `bindkey '˚' optionk` to map it to any other key combo. 
+For more details read [here:](./BINDKEY.md)
+
+Reload: `source ~/.zshrc` or `source ~/.bashrc`
+
+Type in terminal `show date` followed by hotkey combo `Option+K` and you'll see the command there!
 
 ## Installation via Source
 
@@ -88,44 +127,47 @@ When configuring your `config.ini`, keep in mind this difference in regional fle
    ```
 
 3. Configure the AI backend:
-   - Create `~/.optionk/config.ini` file (create directory if it doesn't exist)
-   - Edit the `~/.optionk/config.ini` file to set up your preferred AI service (Google AI Studio or Vertex AI)
+   - Create `~/.config/optionk/config.ini` file (create directory if it doesn't exist)
+   - Edit the `~/.config/optionk/config.ini` file to set up your preferred AI service (Google AI Studio or Vertex AI)
 
 4. Run the server:
    ```
    python server/opk-server.py
    ```
 
-5. Test command completion using the client:
+5. Test command completion using the detailed mode:
    ```
    python client/opk.py "your query here"
    ```
+   or quick mode:
+   ```
+   python client/opk.py "your query here" --quick
+   ```
 
-6. (Optional) Set up the server as a service:
-   - For macOS:
-     ```
-     cp scripts/opk.plist ~/Library/LaunchAgents/com.example.optionk.plist
-     launchctl load ~/Library/LaunchAgents/com.example.optionk.plist
-     ```
-   - For Linux:
-     Set up a systemd service (instructions not provided)
+6. Setup `server/opk-server.py` as a service
 
 7. Add the alias to your shell configuration:
    
-   Edit `scripts/opk_alias.sh` and replace `{INSTALL_PATH}` with the path to your Option-K directory.
+   Now, all that is left is to map a hotkey combo to this `opk --quick command.`
 
+   Edit ~/.zshrc or ~/.bashrc and add this line (if `opk` is in path, if not then specify the full path):
+
+   ```zsh
+   optionk() {
+      local query="$BUFFER"
+      local result=$(opk query --quick "$query")
+      BUFFER="$result"
+      zle end-of-line
+   }
+   zle -N optionk
+   bindkey '˚' optionk 
    ```
-   echo "source /path/to/Option-K/scripts/opk_alias.sh" >> ~/.zshrc  # or ~/.bashrc
-   source ~/.zshrc  # reload zshrc
-   ```
+Reload: `source ~/.zshrc` or `source ~/.bashrc`
 
 ## Files
 
 - `client/opk.py`: Main CLI interface
 - `server/opk-server.py`: Backend server handling AI requests
-- `scripts/opk.plist`: macOS launch agent configuration
-- `scripts/opk_alias.sh`: Shell alias for quick access
-- `setup.py`: Python package setup file
 
 ## Contributing
 

@@ -88,7 +88,7 @@ If you want one line quick suggestion: `opk "show current time" --quick`
 
 Now, all that is left is to map a hotkey combo to this `opk --quick command.`
 
-Edit ~/.zshrc or ~/.bashrc and add this line:
+Edit `~/.zshrc` if using zsg or ~/.bashrc if using bash as you shell and add this line:
 
 ```zsh
 

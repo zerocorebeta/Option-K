@@ -18,6 +18,23 @@ import vertexai
 import logging
 import re
 
+# Move these global variables outside of the run_server function
+config = configparser.ConfigParser()
+model = None
+vertex_safetysettings = {
+    VertexHarmCategory.HARM_CATEGORY_HARASSMENT: VertexHarmBlockThreshold.BLOCK_ONLY_HIGH,
+    VertexHarmCategory.HARM_CATEGORY_HATE_SPEECH: VertexHarmBlockThreshold.BLOCK_ONLY_HIGH,
+    VertexHarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: VertexHarmBlockThreshold.BLOCK_ONLY_HIGH,
+    VertexHarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: VertexHarmBlockThreshold.BLOCK_ONLY_HIGH
+}
+
+googleai_safetysettings = {
+    GoogleHarmCategory.HARM_CATEGORY_HARASSMENT: GoogleHarmBlockThreshold.BLOCK_NONE,
+    GoogleHarmCategory.HARM_CATEGORY_HATE_SPEECH: GoogleHarmBlockThreshold.BLOCK_NONE,
+    GoogleHarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: GoogleHarmBlockThreshold.BLOCK_NONE,
+    GoogleHarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: GoogleHarmBlockThreshold.BLOCK_NONE
+}
+
 def create_default_config(config_path):
     config = configparser.ConfigParser()
     config['optionk'] = {
@@ -64,35 +81,6 @@ def get_config_path(custom_path=None):
         return old_config_path
     
     return config_path
-
-# Load configuration
-config = configparser.ConfigParser()
-config.read(get_config_path())
-
-# Initialize AI model based on configuration
-if config.getboolean('vertexai', 'enabled', fallback=False):
-    vertexai.init(project=config.get('vertexai', 'project'), location=config.get('vertexai', 'location'))
-    model = GenerativeModel(config.get('vertexai', 'model'))
-elif config.getboolean('google_ai_studio', 'enabled', fallback=False):
-    genai.configure(api_key=config.get('google_ai_studio', 'api_key'))
-    model = genai.GenerativeModel(config.get('google_ai_studio', 'model'))
-else:
-    raise ValueError("No AI service is enabled in the configuration")
-
-
-vertex_safetysettings = {
-    VertexHarmCategory.HARM_CATEGORY_HARASSMENT: VertexHarmBlockThreshold.BLOCK_NONE,
-    VertexHarmCategory.HARM_CATEGORY_HATE_SPEECH: VertexHarmBlockThreshold.BLOCK_NONE,
-    VertexHarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: VertexHarmBlockThreshold.BLOCK_NONE,
-    VertexHarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: VertexHarmBlockThreshold.BLOCK_NONE
-}
-
-googleai_safetysettings = {
-    GoogleHarmCategory.HARM_CATEGORY_HARASSMENT: GoogleHarmBlockThreshold.BLOCK_NONE,
-    GoogleHarmCategory.HARM_CATEGORY_HATE_SPEECH: GoogleHarmBlockThreshold.BLOCK_NONE,
-    GoogleHarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: GoogleHarmBlockThreshold.BLOCK_NONE,
-    GoogleHarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: GoogleHarmBlockThreshold.BLOCK_NONE
-}
 
 @lru_cache(maxsize=1)
 def get_system_info():
@@ -279,6 +267,8 @@ def parse_arguments():
     return parser.parse_args()
 
 def run_server():
+    global config, model  # Add this line to use global variables
+
     args = parse_arguments()
     
     config_path = get_config_path(args.config)
@@ -288,7 +278,6 @@ def run_server():
     else:
         print(f"Using configuration file: {config_path}")
     
-    config = configparser.ConfigParser()
     config.read(config_path)
 
     # Set up logging

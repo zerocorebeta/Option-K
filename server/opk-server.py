@@ -74,12 +74,6 @@ def get_config_path(custom_path=None):
         config_path = os.path.join(os.environ.get('APPDATA'), 'optionk', 'config.ini')
     else:
         config_path = os.path.expanduser('~/.config/optionk/config.ini')
-    
-    # Check for the old config location
-    old_config_path = os.path.expanduser('~/.optionk/config.ini')
-    if os.path.exists(old_config_path) and not os.path.exists(config_path):
-        return old_config_path
-    
     return config_path
 
 @lru_cache(maxsize=1)

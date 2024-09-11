@@ -21,16 +21,26 @@ from prompt_toolkit.styles import Style
 from prompt_toolkit.buffer import Buffer
 import aiofiles
 import configparser
+import platform
+
 # Initialize the console
 console = Console()
 
-# Command history file
-HISTORY_FILE = os.path.expanduser('~/.optionk/history')
+def get_config_path():
+    if platform.system() == "Windows":
+        config_path = os.path.join(os.environ.get('APPDATA'), 'optionk', 'config.ini')
+    else:
+        config_path = os.path.expanduser('~/.config/optionk/config.ini')
+    return config_path
 
+# Replace the existing config reading
 config = configparser.ConfigParser()
-config.read(os.path.expanduser('~/.optionk/config.ini'))
+config.read(get_config_path())
 
-PORT = config.get('optionk', 'port')
+PORT = config.get('optionk', 'port', fallback='8089')
+
+# Update HISTORY_FILE path
+HISTORY_FILE = os.path.join(os.path.dirname(get_config_path()), 'history')
 
 async def save_to_history(command):
     try:

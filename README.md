@@ -67,7 +67,7 @@ model = gemini-1.5-flash
 
 Note `enabled` should be set to `true` for one of the AI backends.
 
-Request a free Google AI Studio API key https://ai.google.dev/gemini-api/docs/getting-started
+Request a free Google AI Studio API key https://ai.google.dev/gemini-api
 
 For vertex, auth is handled by gcloud cli:
 https://cloud.google.com/vertex-ai/generative-ai/docs/start/quickstarts/quickstart-multimodal#set-up-your-environment

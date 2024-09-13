@@ -72,9 +72,11 @@ Request a free Google AI Studio API key https://ai.google.dev/gemini-api
 For vertex, auth is handled by gcloud cli:
 https://cloud.google.com/vertex-ai/generative-ai/docs/start/quickstarts/quickstart-multimodal#set-up-your-environment
 
+I just did ` gcloud auth application-default login` and it worked. Beyond that i did not need any additional setup.
+
 Note on Region Support:
 - Vertex AI: Supports custom regions, allowing you to specify a location of your choice.
-- Google AI Studio: Only supports the `us-central1` regi on. This cannot be changed.
+- Google AI Studio: Only supports `us-central1` region. This cannot be changed.
 
 When configuring your `config.ini`, keep in mind this difference in regional flexibility between the two services.
 
